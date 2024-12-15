@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from "react";
 import Select from "react-select";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 
 const BreakdownLog = () => {
   const [dates, setDates] = useState([]);
@@ -10,6 +12,8 @@ const BreakdownLog = () => {
   const [faultDescriptions, setFaultDescriptions] = useState([]);
   const [partOptions, setPartOptions] = useState([]); // For Part Code/Name options
   const [selectedParts, setSelectedParts] = useState([]); // Store selected parts data
+  // const [startDate, setStartDate] = useState("");
+  // const [endDate, setEndDate] = useState("");
 
   const [formData, setFormData] = useState({
     date: "",
@@ -25,6 +29,104 @@ const BreakdownLog = () => {
     partDetails: [], // Details of selected parts
     remarks: "",
   });
+
+  const [logs, setLogs] = useState([]);
+  
+    // Fetch logs from the backend
+    useEffect(() => {
+        fetch("http://localhost:5000/api/breakdown-log/logs")
+            .then((response) => response.json())
+            .then((data) => setLogs(data))
+            .catch((error) => console.error("Error fetching logs:", error));
+    }, []);
+
+     // Function to download data as Excel
+      const downloadExcel = () => {
+          const worksheet = XLSX.utils.json_to_sheet(logs);
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, "Breakdown Logs");
+          XLSX.writeFile(workbook, "Breakdown_Logs.xlsx");
+      };
+     
+      
+      const downloadPDF = () => {
+        const doc = new jsPDF();
+      
+        // Title
+        doc.setFontSize(18);
+        doc.text("Breakdown Log Report", 14, 20);
+      
+        // Table columns and cleaned data
+        const tableColumn = [
+          "Date",
+          "Department",
+          "Operator Name",
+          "Machine No",
+          "Fault Description",
+          "Fault Time",
+          "Start Date",
+          "End Date",
+          "Repair Time (hrs)",
+          "Breakdown Time (hrs)",
+          "Remarks",
+        ];
+      
+        const tableRows = logs.map((log) => [
+          new Date(log.date).toLocaleString(), // Clean date format
+          log.department,
+          log.operator_name,
+          log.machine_no,
+          log.fault_description,
+          new Date(log.fault_time).toLocaleString(), // Format fault time
+          new Date(log.start_time).toLocaleString(), // Format start time
+          new Date(log.end_time).toLocaleString(),   // Format end time
+          log.repair_time, // Safe repair time
+          log.breakdown_time, // Safe breakdown time
+          log.remarks,
+        ]);
+        
+      
+        // Fix styles for better readability
+        doc.autoTable({
+          head: [tableColumn],
+          body: tableRows,
+          startY: 30,
+          theme: "striped",
+          headStyles: {
+            fillColor: [41, 128, 185],
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+            halign: "center",
+          },
+          columnStyles: {
+            3: { halign: "center" }, // Machine No
+            8: { halign: "right" },  // Repair Time
+            9: { halign: "right" },  // Breakdown Time
+          },
+          styles: {
+            fontSize: 6,
+            cellPadding: 2,
+            overflow: "linebreak",
+          },
+          alternateRowStyles: { fillColor: [245, 245, 245] },
+          didDrawPage: (data) => {
+            // Footer for page number
+            const pageCount = doc.internal.getNumberOfPages();
+            const pageHeight = doc.internal.pageSize.height;
+            doc.setFontSize(6);
+            doc.text(
+              `Page ${doc.internal.getCurrentPageInfo().pageNumber} of ${pageCount}`,
+              data.settings.margin.left,
+              pageHeight - 10
+            );
+          },
+        });
+      
+        // Save the PDF
+        doc.save("Breakdown_Log_Report.pdf");
+      };
+      
+      
 
   const convertExcelDate = (excelSerial) => {
     const excelStartDate = new Date(1899, 11, 30);
@@ -153,7 +255,7 @@ const BreakdownLog = () => {
     }));
   };
 
-  // Handle input changes for part details (quantity, issuedTo, issuedBy)
+  
   // Handle input changes for part details (quantity, issuedTo, issuedBy, partStatus)
 const handlePartDetailChange = (index, field, value) => {
   const updatedParts = [...selectedParts];
@@ -223,8 +325,8 @@ const handlePartDetailChange = (index, field, value) => {
       })
       .catch((error) => console.error("Error submitting data:", error));
   };
- 
-  
+
+
 
   return (
     <div className="container">
@@ -393,6 +495,47 @@ const handlePartDetailChange = (index, field, value) => {
 
         <button type="submit" className="submit-btn">Submit</button>
       </form>
+      <div>
+            <h1>Breakdown Logs</h1>
+            <button onClick={downloadExcel}>Download Excel</button>
+            <button onClick={downloadPDF}>Download PDF</button>
+
+            {/* Table to Display Data */}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Department</th>
+                        <th>Operator Name</th>
+                        <th>Machine No</th>
+                        <th>Fault Description</th>
+                        <th>Fault Time</th>
+                        <th>Start Date and Time</th>
+                        <th>End Date and Time</th>
+                        <th>Repair Time</th>
+                        <th>Breakdown Time</th>
+                        <th>Remarks</th>
+                      </tr>
+                </thead>
+                <tbody>
+                    {logs.map((log, index) => (
+                        <tr key={index}>
+                            <td>{log.date}</td>
+                            <td>{log.department}</td>
+                            <td>{log.operator_name}</td>
+                            <td>{log.machine_no}</td>
+                            <td>{log.fault_description}</td>
+                            <td>{log.fault_time}</td>
+                            <td>{log.start_time}</td>
+                            <td>{log.end_time}</td>
+                            <td>{log.repair_time}</td>
+                            <td>{log.breakdown_time}</td>
+                            <td>{log.remarks}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
     </div>
   );
 };
